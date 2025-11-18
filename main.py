@@ -4,14 +4,18 @@ import cv2
 import time
 import numpy as np
 import os
+import torch
+from ultralytics.utils.plotting import colors
+from ultralytics.data.augment import LetterBox
 
 from config import *
 from Nuscenes.loader import NuScenesLoader
 from Yolo.yolo_model import YOLODetector
 from Transformer.detr_model import DETRRefiner
 from Detection.drawer import Drawer
-from Transformer.tracker import StableIDTracker
+from Transformer.tracker import TransformerTracker
 import subprocess
+from Transformer.trajectory_predictor import evaluate_trajectory, save_evaluation_summary, save_text_summary
 
 def gpu_stats():
     try:
@@ -22,56 +26,6 @@ def gpu_stats():
         pass
     gpu_stats()
 
-# ==========================================================
-# VIDEO CONTROLLER (PAUSE, SLOW-MO, SPEED-UP, SKIP)
-# ==========================================================
-class VideoController:
-    def __init__(self, base_delay=10):
-        self.delay = base_delay           # 30ms per frame (≈33 FPS)
-        self.min_delay = 1
-        self.max_delay = 200
-
-    def handle_input(self):
-        key = cv2.waitKey(self.delay) & 0xFF
-
-        # SPACE → Pause
-        if key == ord(' '):
-            print("⏸ Paused — press SPACE to resume")
-            while True:
-                k = cv2.waitKey(0) & 0xFF
-                if k == ord(' '):
-                    print("▶ Resumed")
-                    break
-                elif k == 27:
-                    return "quit"
-
-        # ',' → slowdown
-        if key == ord(','):
-            self.delay = min(self.delay + 10, self.max_delay)
-            print(f"🐌 Slowing down — delay = {self.delay}ms")
-
-        # '.' → speed up
-        if key == ord('.'):
-            self.delay = max(self.delay - 10, self.min_delay)
-            print(f"⚡ Speeding up — delay = {self.delay}ms")
-
-        # '<' → skip backwards (symbolic)
-        if key == ord('<'):
-            print("⏪ Jump back (not fully implemented)")
-
-        # '>' → skip forward (symbolic)
-        if key == ord('>'):
-            print("⏩ Jump forward (not fully implemented)")
-
-        # ESC → Quit
-        if key == 27:
-            return "quit"
-
-        return None
-
-# -------------------------
-# IOU UTILITY
-# -------------------------
 def box_iou(a, b):
     x1a, y1a, x2a, y2a = a
     x1b, y1b, x2b, y2b = b
@@ -85,29 +39,27 @@ def box_iou(a, b):
     union = max(0, (x2a - x1a)) * max(0, (y2a - y1a)) + \
             max(0, (x2b - x1b)) * max(0, (y2b - y1b)) - inter
 
-    if union <= 0:
-        return 0
-    return inter / union
+    return inter / union if union > 0 else 0
 
-
-# -------------------------
-# LOAD MODULES
-# -------------------------
 loader = NuScenesLoader(NUSCENES_ROOT)
 yolo = YOLODetector(DEVICE)
 detr = DETRRefiner(device=DEVICE, threshold=DETR_THRESHOLD)
-drawer = Drawer()
+tracker = TransformerTracker()
 
-# Video writer
 video_writer = None
 fps_time = time.time()
 frame_idx = 0
 
-# -------------------------
-# MAIN LOOP
-# -------------------------
-for frame, timestamp, token in loader.frames(CAMERA_CHANNEL):
+CLASS_COLORS = {
+    "car": (255, 0, 0),
+    "truck": (0, 255, 0),
+    "bus": (0, 0, 255),
+    "person": (255, 255, 0),
+    "bicycle": (255, 0, 255),
+    "motorbike": (0, 255, 255)
+}
 
+for frame, timestamp, token in loader.frames(CAMERA_CHANNEL):
 
     if video_writer is None:
         h, w = frame.shape[:2]
@@ -126,10 +78,8 @@ for frame, timestamp, token in loader.frames(CAMERA_CHANNEL):
             break
         continue
 
-    # Run DETR on entire frame
     detr_out = detr.predict(frame)
 
-    # Build DETR class mapping (COCO IDs)
     DETR_CLASS = {
         1: "person",
         2: "bicycle",
@@ -139,20 +89,16 @@ for frame, timestamp, token in loader.frames(CAMERA_CHANNEL):
         8: "truck"
     }
 
-    # -------------------------
-    # REFINE EACH YOLO BOX
-    # -------------------------
-    final_boxes = []
+    final_dets = []
 
     for det in tracks:
         ybox = det["box"]
         ycls = det["cls_name"]
-        tid = det["stable_id"]
+        tid = det["track_id"]
 
         if ycls not in VALID_CLASSES:
             continue
 
-        # Match DETR boxes with same class
         best_iou = 0
         best_box = None
 
@@ -169,19 +115,46 @@ for frame, timestamp, token in loader.frames(CAMERA_CHANNEL):
                 best_iou = iou_val
                 best_box = fr["box"]
 
-        # Choose refined box or YOLO box
-        if best_box is not None and best_iou > DETR_IOU_MATCH:
-            final_boxes.append((best_box, ycls, tid))
-        else:
-            final_boxes.append((ybox, ycls, tid))
+        final_box = best_box if best_box is not None and best_iou > DETR_IOU_MATCH else ybox
 
-    # -------------------------
-    # DRAW RESULTS
-    # -------------------------
-    for box, cls_name, tid in final_boxes:
-        drawer.draw_box(frame, box, cls_name, tid)
+        final_dets.append({
+            "box": final_box,
+            "cls_name": ycls,
+            "score": det.get("score", 1.0)
+        })
 
-    # FPS overlay
+    updated = tracker.update(final_dets, frame_idx)
+
+    evaluate_trajectory(tracker.track_history, updated, frame_idx)
+
+    for obj in updated:
+        box = obj["box"]
+        cls = obj["cls_name"]
+        if cls not in CLASS_COLORS:
+            continue
+
+        x1, y1, x2, y2 = map(int, box)
+        color = CLASS_COLORS[cls]
+
+        # Semi-transparent color overlay on object region
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
+        cv2.addWeighted(overlay, 0.35, frame, 0.65, 0, frame)
+
+        # Class label (only)
+        label = f"{cls}"
+        cv2.putText(
+            frame,
+            label,
+            (x1 + 5, max(y1 - 5, 15)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            color,
+            2
+        )
+
+
+
     fps = frame_idx / (time.time() - fps_time)
     cv2.putText(frame, f"FPS: {fps:.2f}",
                 (20, 40), cv2.FONT_HERSHEY_SIMPLEX,
@@ -193,11 +166,10 @@ for frame, timestamp, token in loader.frames(CAMERA_CHANNEL):
     if cv2.waitKey(1) == 27:
         break
 
-# -------------------------
-# CLEANUP
-# -------------------------
 video_writer.release()
 cv2.destroyAllWindows()
+save_evaluation_summary()
+save_text_summary()
 
 print("\n🔥 DONE — Saved refined tracking to:")
 print(OUTPUT_PATH)

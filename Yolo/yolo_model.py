@@ -1,13 +1,14 @@
 import torch
 from ultralytics import YOLO
 from config import VALID_CLASSES
-from Transformer.tracker import StableIDTracker  # NEW IMPORT
+from Transformer.tracker import TransformerTracker
+
 
 class YOLODetector:
     def __init__(self,device):
         self.device = device
         self.model = YOLO("yolo11m-seg.pt").to(device)
-        self.id_tracker = StableIDTracker()  # NEW
+        self.id_tracker = TransformerTracker()
         self.frame_idx = 0
         self.names = self.model.names
 
