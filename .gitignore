@@ -1,0 +1,80 @@
+# =========================================
+# PYTHON IGNORE
+# =========================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+*.pickle
+*.log
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# =========================================
+# MACHINE LEARNING MODELS
+# =========================================
+# YOLO / Torch model weights
+*.pt
+*.pth
+*.onnx
+*.engine
+*.safetensors
+
+# HuggingFace / transformers large downloads
+*.bin
+*.h5
+
+# =========================================
+# OUTPUT FILES
+# =========================================
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+data/trackings/
+results/
+outputs/
+
+# =========================================
+# NUSCENES DATASET (DO NOT UPLOAD)
+# =========================================
+v1.0-mini/
+data/nuscenes/
+nuscenes/
+datasets/
+
+# =========================================
+# CHECKPOINTS & CACHE
+# =========================================
+checkpoints/
+runs/
+cache/
+.temp/
+.tmp/
+
+# =========================================
+# VS CODE / EDITOR SETTINGS
+# =========================================
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+
+# =========================================
+# OS / SYSTEM FILES
+# =========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================================
+# GIT / LFS
+# =========================================
+.gitattributes
+
