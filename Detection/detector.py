@@ -2,11 +2,11 @@ import cv2
 from Yolo.yolo_model import YOLODetector
 from FRCNN.frcnn_model import FRCNNRefiner
 
-from config import VALID_CLASSES, REFINE_IOU_THRESH
+from config import VALID_CLASSES, DEVICE, DETR_IOU_MATCH
 
 
 # ===========================
-# IOU (moved from box_ops.py)
+# IOU 
 # ===========================
 def iou(boxA, boxB):
     x1A, y1A, x2A, y2A = boxA
@@ -30,7 +30,8 @@ def iou(boxA, boxB):
 # ===========================
 class DetectorPipeline:
     def __init__(self):
-        self.yolo = YOLODetector()
+        # ensure detector constructed with proper device
+        self.yolo = YOLODetector(device=DEVICE)
         self.frcnn = FRCNNRefiner()
 
     def process(self, frame):
@@ -76,7 +77,7 @@ class DetectorPipeline:
                     best_box = fr_box
 
             # Use FRCNN box if strong match
-            if best_box is not None and best_iou >= REFINE_IOU_THRESH:
+            if best_box is not None and best_iou >= DETR_IOU_MATCH:
                 refined.append((best_box, tid, cls_name))
             else:
                 refined.append((box, tid, cls_name))

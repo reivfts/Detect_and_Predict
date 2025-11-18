@@ -24,7 +24,7 @@ def gpu_stats():
         print(f"GPU Util: {gpu_util}% | Mem Used: {mem_used}MB")
     except:
         pass
-    gpu_stats()
+    # Note: do not recurse. Call `gpu_stats()` from a loop or externally if periodic updates are desired.
 
 def box_iou(a, b):
     x1a, y1a, x2a, y2a = a
@@ -40,6 +40,37 @@ def box_iou(a, b):
             max(0, (x2b - x1b)) * max(0, (y2b - y1b)) - inter
 
     return inter / union if union > 0 else 0
+
+class VideoController:
+    def __init__(self, base_delay=10):
+        self.delay = base_delay
+        self.min_delay = 1
+        self.max_delay = 200
+
+    def handle_input(self):
+        key = cv2.waitKey(self.delay) & 0xFF
+
+        if key == ord(' '):
+            print("⏸ Paused — press SPACE to resume")
+            while True:
+                k = cv2.waitKey(0) & 0xFF
+                if k == ord(' '):
+                    print("▶ Resumed")
+                    break
+                elif k == 27:
+                    return "quit"
+
+        elif key == ord(','):
+            self.delay = min(self.delay + 10, self.max_delay)
+            print(f"🐌 Slowing down — delay = {self.delay}ms")
+        elif key == ord('.'):
+            self.delay = max(self.delay - 10, self.min_delay)
+            print(f"⚡ Speeding up — delay = {self.delay}ms")
+        elif key == 27:
+            return "quit"
+
+        return None
+
 
 loader = NuScenesLoader(NUSCENES_ROOT)
 yolo = YOLODetector(DEVICE)
@@ -123,7 +154,8 @@ for frame, timestamp, token in loader.frames(CAMERA_CHANNEL):
             "score": det.get("score", 1.0)
         })
 
-    updated = tracker.update(final_dets, frame_idx)
+    # Pass frame to tracker so appearance embeddings can be used when enabled
+    updated = tracker.update(final_dets, frame_idx, frame=frame)
 
     evaluate_trajectory(tracker.track_history, updated, frame_idx)
 
@@ -161,10 +193,13 @@ for frame, timestamp, token in loader.frames(CAMERA_CHANNEL):
                 1, (0, 255, 0), 2)
 
     video_writer.write(frame)
+    controller = VideoController()
+
     cv2.imshow("YOLO + DETR Tracking", frame)
 
-    if cv2.waitKey(1) == 27:
+    if controller.handle_input() == "quit":
         break
+
 
 video_writer.release()
 cv2.destroyAllWindows()

@@ -28,6 +28,16 @@ YOLO_CONF = 0.4
 YOLO_IOU = 0.45
 YOLO_IMGSZ = 1280
 
+# Appearance (ReID) matching - optional. Disabled by default to keep tests lightweight.
+APPEARANCE_MATCHING = False
+# Weighting between appearance distance and IoU when computing assignment cost.
+# cost = APPEARANCE_WEIGHT * appearance_distance + IOU_WEIGHT * (1 - iou)
+APPEARANCE_WEIGHT = 0.6
+IOU_WEIGHT = 0.4
+
+# Device for embedding model (defaults to main DEVICE)
+EMBEDDING_DEVICE = DEVICE
+
 # DETR settings
 DETR_THRESHOLD = 0.50
 DETR_IOU_MATCH = 0.30
