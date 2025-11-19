@@ -51,9 +51,7 @@ class YOLODetector:
                 "score": float(score)
             })
 
-        # ---------------------------------------------------------
-        # ⭐ STEP 2: ASSIGN STABLE TRANSFORMER-BASED IDs
-        # ---------------------------------------------------------
+        # STEP 2: ASSIGN STABLE TRANSFORMER-BASED IDs
         # Pass the raw frame to the tracker so appearance embeddings can be computed (optional)
         detections = self.id_tracker.update(
             detections,

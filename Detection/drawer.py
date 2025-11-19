@@ -8,9 +8,7 @@ class Drawer:
     def __init__(self, line_width=2):
         self.line_width = line_width
 
-    # ============================================================
     # DRAW BOUNDING BOX
-    # ============================================================
     def draw_box(self, frame, box, cls_name, track_id=None):
         """
         Draws a bounding box and class label, using the track_id for consistent coloring.
@@ -35,9 +33,7 @@ class Drawer:
         )
 
 
-    # ============================================================
     # DRAW SEGMENTATION MASK (OPTIONAL)
-    # ============================================================
     def draw_mask(self, frame, mask, track_id):
         """
         Overlay a semi-transparent mask on the frame.
@@ -50,9 +46,7 @@ class Drawer:
         alpha = 0.4
         cv2.addWeighted(colored_mask, alpha, frame, 1 - alpha, 0, frame)
 
-    # ============================================================
     # DRAW ONLY ID LABEL
-    # ============================================================
     def draw_id_label(self, frame, box, track_id):
         x1, y1, x2, y2 = map(int, box)
 
