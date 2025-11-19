@@ -1,5 +1,3 @@
-# CONFIGURATION FILE
-
 import os
 import torch
 
@@ -18,8 +16,29 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # Camera
 CAMERA_CHANNEL = "CAM_FRONT"
 
-# Classes to keep (COCO + NuScenes relevant)
-VALID_CLASSES = ["person", "bicycle", "car", "motorbike", "bus", "truck"]
+# Classes for COCO and NuScenes
+VALID_CLASSES = ["person", "bicycle", "car", "motorcycle", "bus", "truck"]
+
+# FRCNN settings  
+FRCNN_SCORE_THRESH = 0.5
+
+# Standard COCO category names
+COCO_INSTANCE_CATEGORY_NAMES = [
+    '__background__', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
+    'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep',
+    'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
+    'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
+    'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli',
+    'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'sofa', 'potted plant', 'bed', 'dining table', 'toilet', 'tv',
+    'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book',
+    'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+]
+
+# Map the torchvision/COCO 
+# torchvision's detection models return labels that index into the list above.
+FRCNN_ID2NAME = {
+    i: name for i, name in enumerate(COCO_INSTANCE_CATEGORY_NAMES) if name in VALID_CLASSES
+}
 
 # YOLO settings
 YOLO_CONF = 0.4
