@@ -5,9 +5,7 @@ from FRCNN.frcnn_model import FRCNNRefiner
 from config import VALID_CLASSES, DEVICE, DETR_IOU_MATCH
 
 
-# ===========================
-# IOU 
-# ===========================
+# IOU calculation
 def iou(boxA, boxB):
     x1A, y1A, x2A, y2A = boxA
     x1B, y1B, x2B, y2B = boxB
@@ -25,9 +23,7 @@ def iou(boxA, boxB):
     return inter / union if union > 0 else 0
 
 
-# ===========================
 # DETECTOR PIPELINE
-# ===========================
 class DetectorPipeline:
     def __init__(self):
         # ensure detector constructed with proper device

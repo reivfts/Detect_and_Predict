@@ -1,6 +1,4 @@
-# ================================
 # CONFIGURATION FILE
-# ================================
 
 import os
 import torch

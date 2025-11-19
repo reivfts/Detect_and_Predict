@@ -27,9 +27,7 @@ class TransformerTracker:
         with open(self.log_path, 'w') as f:
             f.write("track_id,frame,x_pred,y_pred,x_actual,y_actual,error\n")
 
-    # -----------------------------
     # Helper: Kalman filter creation
-    # -----------------------------
     def _create_kalman(self, cx, cy, w, h):
         # State: [cx, cy, vx, vy, w, h]
         kf = KalmanFilter(dim_x=6, dim_z=4)

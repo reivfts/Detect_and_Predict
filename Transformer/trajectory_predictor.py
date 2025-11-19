@@ -105,13 +105,13 @@ def save_text_summary():
     frame_ids = set(row["frame"] for row in ALL_EVALS)
 
     with open(txt_path, 'w') as f:
-        f.write("=== Trajectory Evaluation Summary ===\n")
+        f.write("Trajectory Evaluation Summary\n")
         f.write(f"Average IoU: {np.mean(ious):.4f}\n")
         f.write(f"Average Center Distance: {np.mean(dists):.2f} pixels\n")
         f.write(f"Total Tracks Evaluated: {len(track_ids)}\n")
         f.write(f"Total Frames Evaluated: {len(frame_ids)}\n")
 
-    print(f"📄 Accuracy summary saved to: {txt_path}")
+    print(f"Accuracy summary saved to: {txt_path}")
 
 
-    print(f"✅ Trajectory evaluation saved to: {CSV_PATH}")
+    print(f"Trajectory evaluation saved to: {CSV_PATH}")

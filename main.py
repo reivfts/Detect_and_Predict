@@ -51,21 +51,21 @@ class VideoController:
         key = cv2.waitKey(self.delay) & 0xFF
 
         if key == ord(' '):
-            print("⏸ Paused — press SPACE to resume")
+            print("Paused - press SPACE to resume")
             while True:
                 k = cv2.waitKey(0) & 0xFF
                 if k == ord(' '):
-                    print("▶ Resumed")
+                    print("Resumed")
                     break
                 elif k == 27:
                     return "quit"
 
         elif key == ord(','):
             self.delay = min(self.delay + 10, self.max_delay)
-            print(f"🐌 Slowing down — delay = {self.delay}ms")
+            print(f"Slowing down - delay = {self.delay}ms")
         elif key == ord('.'):
             self.delay = max(self.delay - 10, self.min_delay)
-            print(f"⚡ Speeding up — delay = {self.delay}ms")
+            print(f"Speeding up - delay = {self.delay}ms")
         elif key == 27:
             return "quit"
 
@@ -206,5 +206,5 @@ cv2.destroyAllWindows()
 save_evaluation_summary()
 save_text_summary()
 
-print("\n🔥 DONE — Saved refined tracking to:")
+print("\nDONE - Saved refined tracking to:")
 print(OUTPUT_PATH)
