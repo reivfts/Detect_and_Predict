@@ -16,6 +16,7 @@ Strategy:
 
 import numpy as np
 from typing import List, Dict, Optional
+from config import DETR_CLASS_MAP
 
 
 def compute_iou(boxA: List[float], boxB: List[float]) -> float:
@@ -74,16 +75,6 @@ def fuse_cnn_transformer(
         - "cnn+transformer": Both FRCNN and DETR agree (IoU > threshold)
         - "cnn_only": Only FRCNN detected, no DETR confirmation
     """
-    
-    # DETR COCO class mapping (only relevant classes)
-    DETR_CLASS_MAP = {
-        1: "person",
-        2: "bicycle",
-        3: "car",
-        4: "motorcycle",
-        6: "bus",
-        8: "truck"
-    }
     
     fused_results = []
     

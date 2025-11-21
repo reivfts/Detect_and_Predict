@@ -72,8 +72,9 @@ class DeepSORTWrapper:
         """
         if frame is None:
             # DeepSORT needs frame for appearance embedding
-            # If not provided, use dummy frame or fall back to position only
-            pass
+            # Create a dummy frame if not provided (fall back to position-only tracking)
+            import numpy as np
+            frame = np.zeros((480, 640, 3), dtype=np.uint8)
         
         # Convert detections to DeepSORT format
         # DeepSORT expects: ([left, top, width, height], confidence, class_name)

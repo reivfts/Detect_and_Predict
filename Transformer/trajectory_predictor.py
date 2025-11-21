@@ -8,7 +8,10 @@ from typing import List, Optional, Dict
 import torch
 import torch.nn as nn
 
-SAVE_PATH = r"C:\Users\rayra\OneDrive\Desktop\Detect_and_Predict\data\trackings"
+# Import BASE_DIR from config for platform-independent paths
+from config import BASE_DIR
+
+SAVE_PATH = os.path.join(BASE_DIR, "data", "trackings")
 CSV_PATH = os.path.join(SAVE_PATH, "evaluation.csv")
 os.makedirs(SAVE_PATH, exist_ok=True)
 
@@ -38,7 +41,7 @@ class TrajectoryTransformerPredictor(nn.Module):
             dropout: Dropout rate
             device: Device to run model on ("cuda" or "cpu")
         """
-        super(TrajectoryTransformerPredictor, self).__init__()
+        super().__init__()
         
         self.history_len = history_len
         self.d_model = d_model

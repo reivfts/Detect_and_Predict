@@ -32,6 +32,9 @@ from Transformer.trajectory_predictor import (
     save_text_summary
 )
 
+# Configuration constant for DetectorPipeline default score
+DETECTOR_PIPELINE_DEFAULT_SCORE = 0.85
+
 
 def gpu_stats():
     """Display GPU utilization statistics."""
@@ -152,7 +155,7 @@ def main():
             frcnn_dets.append({
                 "box": box,
                 "cls_name": cls_name,
-                "score": 0.9,  # DetectorPipeline doesn't return scores
+                "score": DETECTOR_PIPELINE_DEFAULT_SCORE,  # DetectorPipeline doesn't return scores
                 "track_id": tid
             })
         
@@ -173,14 +176,12 @@ def main():
             fused_dets = frcnn_dets
         elif FUSION_MODE == "transformer_only":
             # Transformer only: use DETR detections directly
-            DETR_CLASS = {1: "person", 2: "bicycle", 3: "car", 
-                         4: "motorcycle", 6: "bus", 8: "truck"}
             fused_dets = []
             for det in detr_out:
-                if det["label"] in DETR_CLASS:
+                if det["label"] in DETR_CLASS_MAP:
                     fused_dets.append({
                         "box": det["box"],
-                        "cls_name": DETR_CLASS[det["label"]],
+                        "cls_name": DETR_CLASS_MAP[det["label"]],
                         "score": det["score"]
                     })
         else:

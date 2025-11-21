@@ -59,6 +59,16 @@ EMBEDDING_DEVICE = DEVICE
 DETR_THRESHOLD = 0.50
 DETR_IOU_MATCH = 0.30
 
+# DETR COCO class mapping (shared across modules)
+DETR_CLASS_MAP = {
+    1: "person",
+    2: "bicycle",
+    3: "car",
+    4: "motorcycle",
+    6: "bus",
+    8: "truck"
+}
+
 # =========================================
 # CNN-TRANSFORMER FUSION (v2)
 # =========================================

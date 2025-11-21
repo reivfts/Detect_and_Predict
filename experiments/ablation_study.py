@@ -30,7 +30,7 @@ from Transformer.fusion import fuse_cnn_transformer
 from Transformer.trajectory_predictor import (
     linear_extrapolate, box_center, compute_iou, evaluate_trajectory
 )
-from config import DEVICE, DETR_THRESHOLD, DETR_IOU_MATCH
+from config import DEVICE, DETR_THRESHOLD, DETR_IOU_MATCH, DETR_CLASS_MAP
 
 
 class AblationExperiment:
@@ -263,10 +263,7 @@ class ExperimentC(AblationExperiment):
         # DETR refinement
         detr_dets = self.detr.predict(frame)
         
-        DETR_CLASS = {1: "person", 2: "bicycle", 3: "car", 
-                     4: "motorcycle", 6: "bus", 8: "truck"}
-        
-        # Match YOLO with DETR
+        # Match YOLO with DETR using class map from config
         refined_dets = []
         for yolo_det in yolo_dets:
             ybox = yolo_det["box"]
@@ -276,10 +273,10 @@ class ExperimentC(AblationExperiment):
             best_box = None
             
             for detr_det in detr_dets:
-                if detr_det["label"] not in DETR_CLASS:
+                if detr_det["label"] not in DETR_CLASS_MAP:
                     continue
                 
-                detr_cls = DETR_CLASS[detr_det["label"]]
+                detr_cls = DETR_CLASS_MAP[detr_det["label"]]
                 if detr_cls != ycls:
                     continue
                 
