@@ -9,7 +9,6 @@ Uses deep_sort_realtime library with built-in MobileNet feature extractor.
 
 from typing import List, Dict, Optional
 import numpy as np
-import numpy as np
 
 
 class DeepSORTWrapper:

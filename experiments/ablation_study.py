@@ -30,7 +30,7 @@ from Transformer.fusion import fuse_cnn_transformer
 from Transformer.trajectory_predictor import (
     linear_extrapolate, box_center, compute_iou, evaluate_trajectory
 )
-from config import DEVICE, DETR_THRESHOLD, DETR_IOU_MATCH, DETR_CLASS_MAP
+from config import DEVICE, DETR_THRESHOLD, DETR_IOU_MATCH, DETR_CLASS_MAP, CAMERA_CHANNEL
 
 
 class AblationExperiment:
@@ -472,7 +472,8 @@ def run_ablation_study(
         experiment = exp_map[exp_name]()
         
         # Get fresh generator for this experiment
-        frames_generator = loader.frames()
+        # Camera channel defaults to CAMERA_CHANNEL from config if not specified
+        frames_generator = loader.frames(CAMERA_CHANNEL)
         
         frame_idx = 0
         for frame, timestamp, token in frames_generator:
