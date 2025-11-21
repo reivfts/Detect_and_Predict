@@ -146,14 +146,15 @@ from experiments.ablation_study import run_ablation_study
 from Nuscenes.loader import NuScenesLoader
 from config import NUSCENES_ROOT, CAMERA_CHANNEL
 
+# Create loader instance (NOT generator)
 loader = NuScenesLoader(NUSCENES_ROOT)
-frames = loader.frames(CAMERA_CHANNEL)
 
 # Run all experiments (A, B, C, D, E)
-run_ablation_study(frames, max_frames=100)
+# The loader will create fresh generators for each experiment
+run_ablation_study(loader, max_frames=100)
 
 # Or run specific experiments
-run_ablation_study(frames, max_frames=100, experiments=["A", "D", "E"])
+run_ablation_study(loader, max_frames=100, experiments=["A", "D", "E"])
 ```
 
 ### Experiment Configurations

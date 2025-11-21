@@ -435,7 +435,7 @@ class ExperimentE(AblationExperiment):
 
 
 def run_ablation_study(
-    frames_generator,
+    loader,
     max_frames: int = 100,
     experiments: Optional[List[str]] = None
 ):
@@ -443,7 +443,7 @@ def run_ablation_study(
     Run ablation study on given frames.
     
     Args:
-        frames_generator: Generator yielding (frame, timestamp, token) tuples
+        loader: NuScenesLoader instance (NOT a generator - must be reusable)
         max_frames: Maximum number of frames to process
         experiments: List of experiment names to run (default: all)
     """
@@ -470,6 +470,9 @@ def run_ablation_study(
         
         print(f"\nRunning Experiment {exp_name}...")
         experiment = exp_map[exp_name]()
+        
+        # Get fresh generator for this experiment
+        frames_generator = loader.frames()
         
         frame_idx = 0
         for frame, timestamp, token in frames_generator:

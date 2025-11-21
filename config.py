@@ -4,7 +4,11 @@ import torch
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "data", "trackings")
-NUSCENES_ROOT = r"C:\Users\rayra\OneDrive\Desktop\v1.0-mini"
+
+# NOTE: Update this path to your NuScenes dataset location
+# For Windows: r"C:\path\to\nuscenes\v1.0-mini"
+# For Linux/Mac: "/path/to/nuscenes/v1.0-mini"
+NUSCENES_ROOT = os.getenv("NUSCENES_ROOT", r"C:\Users\rayra\OneDrive\Desktop\v1.0-mini")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 

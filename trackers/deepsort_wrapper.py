@@ -9,6 +9,7 @@ Uses deep_sort_realtime library with built-in MobileNet feature extractor.
 
 from typing import List, Dict, Optional
 import numpy as np
+import numpy as np
 
 
 class DeepSORTWrapper:
@@ -73,7 +74,6 @@ class DeepSORTWrapper:
         if frame is None:
             # DeepSORT needs frame for appearance embedding
             # Create a dummy frame if not provided (fall back to position-only tracking)
-            import numpy as np
             frame = np.zeros((480, 640, 3), dtype=np.uint8)
         
         # Convert detections to DeepSORT format
@@ -95,11 +95,8 @@ class DeepSORTWrapper:
                 det["cls_name"]
             ))
         
-        # Update tracker
-        if frame is not None:
-            tracks = self.tracker.update_tracks(raw_detections, frame=frame)
-        else:
-            tracks = self.tracker.update_tracks(raw_detections, frame=None)
+        # Update tracker (frame is guaranteed to be not None at this point)
+        tracks = self.tracker.update_tracks(raw_detections, frame=frame)
         
         # Convert back to our format
         output = []
