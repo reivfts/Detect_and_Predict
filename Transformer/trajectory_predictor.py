@@ -4,6 +4,9 @@ import os
 import csv
 import numpy as np
 from collections import defaultdict
+from typing import List, Optional, Dict
+import torch
+import torch.nn as nn
 
 SAVE_PATH = r"C:\Users\rayra\OneDrive\Desktop\Detect_and_Predict\data\trackings"
 CSV_PATH = os.path.join(SAVE_PATH, "evaluation.csv")
@@ -11,6 +14,125 @@ os.makedirs(SAVE_PATH, exist_ok=True)
 
 # Global accumulator
 ALL_EVALS = []
+
+
+class TrajectoryTransformerPredictor(nn.Module):
+    """
+    Transformer-based trajectory prediction using attention over history.
+    Uses sequence of past bounding boxes to predict future position.
+    
+    This provides an enhanced alternative to linear extrapolation by learning
+    patterns in object motion through attention mechanisms.
+    """
+    
+    def __init__(self, history_len: int = 10, d_model: int = 64, nhead: int = 4, 
+                 num_layers: int = 2, dropout: float = 0.1, device: str = "cuda"):
+        """
+        Initialize trajectory transformer predictor.
+        
+        Args:
+            history_len: Maximum length of trajectory history to consider
+            d_model: Dimension of the model (embedding size)
+            nhead: Number of attention heads
+            num_layers: Number of transformer encoder layers
+            dropout: Dropout rate
+            device: Device to run model on ("cuda" or "cpu")
+        """
+        super(TrajectoryTransformerPredictor, self).__init__()
+        
+        self.history_len = history_len
+        self.d_model = d_model
+        self.device = device
+        
+        # Embedding layer: bbox (4D: x1, y1, x2, y2) -> d_model
+        self.bbox_embedding = nn.Linear(4, d_model)
+        
+        # Positional encoding for sequence order
+        self.pos_encoding = nn.Parameter(torch.randn(history_len, d_model))
+        
+        # Transformer encoder
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=d_model * 4,
+            dropout=dropout,
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers
+        )
+        
+        # Prediction head: d_model -> next bbox (4D)
+        self.prediction_head = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model // 2, 4)
+        )
+        
+        self.to(device)
+        self.eval()  # Set to eval mode by default
+    
+    def forward(self, trajectory_sequence: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for trajectory prediction.
+        
+        Args:
+            trajectory_sequence: Tensor of shape (batch_size, seq_len, 4)
+                                where 4 is [x1, y1, x2, y2]
+        
+        Returns:
+            Predicted next bbox of shape (batch_size, 4)
+        """
+        batch_size, seq_len, _ = trajectory_sequence.shape
+        
+        # Embed bboxes
+        embedded = self.bbox_embedding(trajectory_sequence)  # (B, seq_len, d_model)
+        
+        # Add positional encoding
+        pos_enc = self.pos_encoding[:seq_len, :].unsqueeze(0)  # (1, seq_len, d_model)
+        embedded = embedded + pos_enc
+        
+        # Apply transformer
+        encoded = self.transformer_encoder(embedded)  # (B, seq_len, d_model)
+        
+        # Use last position's encoding for prediction
+        last_encoded = encoded[:, -1, :]  # (B, d_model)
+        
+        # Predict next bbox
+        predicted_bbox = self.prediction_head(last_encoded)  # (B, 4)
+        
+        return predicted_bbox
+    
+    def predict(self, trajectory_history: List[List[float]]) -> Optional[List[float]]:
+        """
+        Predict next bounding box given trajectory history.
+        
+        Args:
+            trajectory_history: List of bboxes [[x1, y1, x2, y2], ...]
+        
+        Returns:
+            Predicted bbox [x1, y1, x2, y2] or None if insufficient history
+        """
+        if len(trajectory_history) < 2:
+            return None
+        
+        # Take last N frames
+        history = trajectory_history[-self.history_len:]
+        
+        # Convert to tensor
+        history_tensor = torch.tensor(history, dtype=torch.float32).unsqueeze(0)  # (1, seq_len, 4)
+        history_tensor = history_tensor.to(self.device)
+        
+        # Predict
+        with torch.no_grad():
+            predicted = self.forward(history_tensor)
+        
+        # Convert back to list
+        predicted_bbox = predicted.cpu().numpy()[0].tolist()
+        
+        return predicted_bbox
 
 def linear_extrapolate(trajectory, steps=1):
     if len(trajectory) < 2:

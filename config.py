@@ -58,3 +58,19 @@ EMBEDDING_DEVICE = DEVICE
 # DETR settings
 DETR_THRESHOLD = 0.50
 DETR_IOU_MATCH = 0.30
+
+# =========================================
+# CNN-TRANSFORMER FUSION (v2)
+# =========================================
+# Fusion parameters
+FUSION_IOU_THRESHOLD = 0.3
+FUSION_MODE = "hybrid"  # Options: "cnn_only", "transformer_only", "hybrid"
+FUSION_CONFIDENCE_PENALTY = 0.7  # Penalty for unvalidated CNN detections
+
+# Trajectory Prediction
+TRAJECTORY_PREDICTOR = "linear"  # Options: "linear", "kalman", "transformer"
+TRAJECTORY_HISTORY_LEN = 10
+
+# Ablation Study
+EXPERIMENT_MODE = "full_hybrid"  # Options: A, B, C, D, E, or "full_hybrid"
+SAVE_INTERMEDIATE_RESULTS = True
