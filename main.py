@@ -1,47 +1,58 @@
 # main.py
 
+"""
+Detect and Predict v2: CNN-Transformer Hybrid Architecture
+
+Implements a complete CNN-Transformer hybrid detection and tracking system:
+- Step 1: YOLO (fast proposals)
+- Step 2: FRCNN (CNN-based accurate localization)
+- Step 3: DETR (Transformer-based global context)
+- Step 4: Fusion of CNN and Transformer outputs
+- Step 5: Custom TransformerTracker with Kalman filtering
+- Step 6: Trajectory prediction and evaluation
+
+Reference: "CNN-transformer mixed model for object detection" (arXiv:2212.06714)
+"""
+
 import cv2
 import time
 import numpy as np
 import os
 import torch
-from ultralytics.utils.plotting import colors
-from ultralytics.data.augment import LetterBox
 
 from config import *
 from Nuscenes.loader import NuScenesLoader
-from Yolo.yolo_model import YOLODetector
+from Detection.detector import DetectorPipeline
 from Transformer.detr_model import DETRRefiner
-from Detection.drawer import Drawer
 from Transformer.tracker import TransformerTracker
-import subprocess
-from Transformer.trajectory_predictor import evaluate_trajectory, save_evaluation_summary, save_text_summary
+from Transformer.fusion import fuse_cnn_transformer
+from Transformer.trajectory_predictor import (
+    evaluate_trajectory, 
+    save_evaluation_summary, 
+    save_text_summary
+)
+
+# Configuration constant for DetectorPipeline default score
+DETECTOR_PIPELINE_DEFAULT_SCORE = 0.85
+
 
 def gpu_stats():
+    """Display GPU utilization statistics."""
     try:
-        result = subprocess.check_output("nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits", shell=True)
+        import subprocess
+        result = subprocess.check_output(
+            "nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits", 
+            shell=True
+        )
         gpu_util, mem_used = result.decode().strip().split(", ")
         print(f"GPU Util: {gpu_util}% | Mem Used: {mem_used}MB")
     except:
         pass
-    # Note: do not recurse. Call `gpu_stats()` from a loop or externally if periodic updates are desired.
 
-def box_iou(a, b):
-    x1a, y1a, x2a, y2a = a
-    x1b, y1b, x2b, y2b = b
-
-    xi1 = max(x1a, x1b)
-    yi1 = max(y1a, y1b)
-    xi2 = min(x2a, x2b)
-    yi2 = min(y2a, y2b)
-
-    inter = max(0, xi2 - xi1) * max(0, yi2 - yi1)
-    union = max(0, (x2a - x1a)) * max(0, (y2a - y1a)) + \
-            max(0, (x2b - x1b)) * max(0, (y2b - y1b)) - inter
-
-    return inter / union if union > 0 else 0
 
 class VideoController:
+    """Handle video playback controls."""
+    
     def __init__(self, base_delay=10):
         self.delay = base_delay
         self.min_delay = 1
@@ -72,139 +83,195 @@ class VideoController:
         return None
 
 
-loader = NuScenesLoader(NUSCENES_ROOT)
-yolo = YOLODetector(DEVICE)
-detr = DETRRefiner(device=DEVICE, threshold=DETR_THRESHOLD)
-tracker = TransformerTracker()
-
-video_writer = None
-fps_time = time.time()
-frame_idx = 0
-
-CLASS_COLORS = {
-    "car": (255, 0, 0),
-    "truck": (0, 255, 0),
-    "bus": (0, 0, 255),
-    "person": (255, 255, 0),
-    "bicycle": (255, 0, 255),
-    "motorbike": (0, 255, 255)
-}
-
-for frame, timestamp, token in loader.frames(CAMERA_CHANNEL):
-
-    if video_writer is None:
-        h, w = frame.shape[:2]
-        video_writer = cv2.VideoWriter(OUTPUT_PATH,
-                                       cv2.VideoWriter_fourcc(*"mp4v"),
-                                       10,
-                                       (w, h))
-
-    frame_idx += 1
-    tracks = yolo.detect(frame)
-
-    if not tracks:
-        video_writer.write(frame)
-        cv2.imshow("YOLO + DETR Tracking", frame)
-        if cv2.waitKey(1) == 27:
-            break
-        continue
-
-    detr_out = detr.predict(frame)
-
-    DETR_CLASS = {
-        1: "person",
-        2: "bicycle",
-        3: "car",
-        4: "motorbike",
-        6: "bus",
-        8: "truck"
+def main():
+    """Main processing loop for CNN-Transformer hybrid pipeline."""
+    
+    print("=" * 60)
+    print("Detect and Predict v2: CNN-Transformer Hybrid")
+    print("=" * 60)
+    print(f"Fusion Mode: {FUSION_MODE}")
+    print(f"Trajectory Predictor: {TRAJECTORY_PREDICTOR}")
+    print(f"Device: {DEVICE}")
+    print("=" * 60)
+    
+    # Initialize components
+    print("\n[1/5] Loading NuScenes dataset...")
+    loader = NuScenesLoader(NUSCENES_ROOT)
+    
+    print("[2/5] Initializing DetectorPipeline (YOLO + FRCNN)...")
+    detector_pipeline = DetectorPipeline()
+    
+    print("[3/5] Initializing DETR (Transformer)...")
+    detr = DETRRefiner(device=DEVICE, threshold=DETR_THRESHOLD)
+    
+    print("[4/5] Initializing TransformerTracker...")
+    tracker = TransformerTracker()
+    
+    print("[5/5] Setup complete. Starting processing...")
+    print("=" * 60)
+    
+    video_writer = None
+    fps_time = time.time()
+    frame_idx = 0
+    controller = VideoController()
+    
+    CLASS_COLORS = {
+        "car": (255, 0, 0),
+        "truck": (0, 255, 0),
+        "bus": (0, 0, 255),
+        "person": (255, 255, 0),
+        "bicycle": (255, 0, 255),
+        "motorcycle": (0, 255, 255)
     }
-
-    final_dets = []
-
-    for det in tracks:
-        ybox = det["box"]
-        ycls = det["cls_name"]
-        tid = det["track_id"]
-
-        if ycls not in VALID_CLASSES:
+    
+    for frame, timestamp, token in loader.frames(CAMERA_CHANNEL):
+        
+        if video_writer is None:
+            h, w = frame.shape[:2]
+            video_writer = cv2.VideoWriter(
+                OUTPUT_PATH,
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                10,
+                (w, h)
+            )
+            print(f"\nVideo output: {OUTPUT_PATH} ({w}x{h})")
+        
+        frame_idx += 1
+        
+        # === STEP 1: YOLO + FRCNN Fusion (DetectorPipeline) ===
+        # This gives us CNN-based detections with accurate localization
+        yolo_frcnn_results = detector_pipeline.process(frame)
+        
+        if not yolo_frcnn_results:
+            video_writer.write(frame)
+            cv2.imshow("CNN-Transformer Hybrid Tracking", frame)
+            if cv2.waitKey(1) == 27:
+                break
             continue
-
-        best_iou = 0
-        best_box = None
-
-        for fr in detr_out:
-            if fr["label"] not in DETR_CLASS:
+        
+        # Convert to standard detection format
+        frcnn_dets = []
+        for box, tid, cls_name in yolo_frcnn_results:
+            frcnn_dets.append({
+                "box": box,
+                "cls_name": cls_name,
+                "score": DETECTOR_PIPELINE_DEFAULT_SCORE,  # DetectorPipeline doesn't return scores
+                "track_id": tid
+            })
+        
+        # === STEP 2: DETR Enhancement (Transformer stage) ===
+        detr_out = detr.predict(frame)
+        
+        # === STEP 3: Fuse FRCNN (CNN) and DETR (Transformer) outputs ===
+        if FUSION_MODE == "hybrid":
+            # Full hybrid: use both CNN and Transformer
+            fused_dets = fuse_cnn_transformer(
+                frcnn_dets, 
+                detr_out, 
+                iou_thresh=FUSION_IOU_THRESHOLD,
+                confidence_penalty=FUSION_CONFIDENCE_PENALTY
+            )
+        elif FUSION_MODE == "cnn_only":
+            # CNN only: skip DETR fusion
+            fused_dets = frcnn_dets
+        elif FUSION_MODE == "transformer_only":
+            # Transformer only: use DETR detections directly
+            fused_dets = []
+            for det in detr_out:
+                if det["label"] in DETR_CLASS_MAP:
+                    fused_dets.append({
+                        "box": det["box"],
+                        "cls_name": DETR_CLASS_MAP[det["label"]],
+                        "score": det["score"]
+                    })
+        else:
+            fused_dets = frcnn_dets
+        
+        # === STEP 4: Track with TransformerTracker ===
+        updated = tracker.update(fused_dets, frame_idx, frame=frame)
+        
+        # === STEP 5: Trajectory prediction and evaluation ===
+        evaluate_trajectory(tracker.track_history, updated, frame_idx)
+        
+        # === Visualization ===
+        for obj in updated:
+            box = obj["box"]
+            cls = obj["cls_name"]
+            if cls not in CLASS_COLORS:
                 continue
-
-            cls_name = DETR_CLASS[fr["label"]]
-            if cls_name != ycls:
-                continue
-
-            iou_val = box_iou(ybox, fr["box"])
-            if iou_val > best_iou:
-                best_iou = iou_val
-                best_box = fr["box"]
-
-        final_box = best_box if best_box is not None and best_iou > DETR_IOU_MATCH else ybox
-
-        final_dets.append({
-            "box": final_box,
-            "cls_name": ycls,
-            "score": det.get("score", 1.0)
-        })
-
-    # Pass frame to tracker so appearance embeddings can be used when enabled
-    updated = tracker.update(final_dets, frame_idx, frame=frame)
-
-    evaluate_trajectory(tracker.track_history, updated, frame_idx)
-
-    for obj in updated:
-        box = obj["box"]
-        cls = obj["cls_name"]
-        if cls not in CLASS_COLORS:
-            continue
-
-        x1, y1, x2, y2 = map(int, box)
-        color = CLASS_COLORS[cls]
-
-        # Semi-transparent color overlay on object region
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
-        cv2.addWeighted(overlay, 0.35, frame, 0.65, 0, frame)
-
-        # Class label (only)
-        label = f"{cls}"
+            
+            x1, y1, x2, y2 = map(int, box)
+            color = CLASS_COLORS.get(cls, (128, 128, 128))
+            
+            # Semi-transparent color overlay
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
+            cv2.addWeighted(overlay, 0.35, frame, 0.65, 0, frame)
+            
+            # Label with validation info if available
+            if "validated_by" in obj:
+                label = f"{cls} [{obj['validated_by'][:3]}]"
+            else:
+                label = f"{cls}"
+            
+            cv2.putText(
+                frame,
+                label,
+                (x1 + 5, max(y1 - 5, 15)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                color,
+                2
+            )
+        
+        # Display FPS and frame info
+        fps = frame_idx / (time.time() - fps_time)
         cv2.putText(
-            frame,
-            label,
-            (x1 + 5, max(y1 - 5, 15)),
+            frame, 
+            f"FPS: {fps:.2f} | Frame: {frame_idx}", 
+            (20, 40), 
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            color,
+            0.8, 
+            (0, 255, 0), 
             2
         )
+        
+        # Display fusion mode
+        cv2.putText(
+            frame,
+            f"Mode: {FUSION_MODE}",
+            (20, 70),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 255),
+            2
+        )
+        
+        video_writer.write(frame)
+        cv2.imshow("CNN-Transformer Hybrid Tracking", frame)
+        
+        if controller.handle_input() == "quit":
+            break
+        
+        # Print progress
+        if frame_idx % 10 == 0:
+            print(f"Processed {frame_idx} frames... FPS: {fps:.2f}")
+    
+    # Cleanup
+    video_writer.release()
+    cv2.destroyAllWindows()
+    
+    # Save evaluation results
+    save_evaluation_summary()
+    save_text_summary()
+    
+    print("\n" + "=" * 60)
+    print("PROCESSING COMPLETE")
+    print("=" * 60)
+    print(f"Output video: {OUTPUT_PATH}")
+    print(f"Total frames: {frame_idx}")
+    print("=" * 60)
 
 
-
-    fps = frame_idx / (time.time() - fps_time)
-    cv2.putText(frame, f"FPS: {fps:.2f}",
-                (20, 40), cv2.FONT_HERSHEY_SIMPLEX,
-                1, (0, 255, 0), 2)
-
-    video_writer.write(frame)
-    controller = VideoController()
-
-    cv2.imshow("YOLO + DETR Tracking", frame)
-
-    if controller.handle_input() == "quit":
-        break
-
-
-video_writer.release()
-cv2.destroyAllWindows()
-save_evaluation_summary()
-save_text_summary()
-
-print("\nDONE - Saved refined tracking to:")
-print(OUTPUT_PATH)
+if __name__ == "__main__":
+    main()

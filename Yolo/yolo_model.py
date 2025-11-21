@@ -12,6 +12,21 @@ class YOLODetector:
         self.frame_idx = 0
         self.names = self.model.names
 
+    def detect_and_track(self, frame):
+        """
+        Runs YOLO detection with built-in tracking and returns raw results object.
+        Used by DetectorPipeline.
+        """
+        results = self.model.track(
+            frame,
+            persist=True,
+            conf=0.45,
+            iou=0.45,
+            imgsz=1280
+        )[0]
+        
+        return results
+
     def detect(self, frame):
         """
         Runs YOLO detection + tracking and returns cleaned results.

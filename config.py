@@ -4,7 +4,11 @@ import torch
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "data", "trackings")
-NUSCENES_ROOT = r"C:\Users\rayra\OneDrive\Desktop\v1.0-mini"
+
+# NOTE: Update this path to your NuScenes dataset location
+# For Windows: r"C:\path\to\nuscenes\v1.0-mini"
+# For Linux/Mac: "/path/to/nuscenes/v1.0-mini"
+NUSCENES_ROOT = os.getenv("NUSCENES_ROOT", r"C:\Users\rayra\OneDrive\Desktop\v1.0-mini")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -58,3 +62,29 @@ EMBEDDING_DEVICE = DEVICE
 # DETR settings
 DETR_THRESHOLD = 0.50
 DETR_IOU_MATCH = 0.30
+
+# DETR COCO class mapping (shared across modules)
+DETR_CLASS_MAP = {
+    1: "person",
+    2: "bicycle",
+    3: "car",
+    4: "motorcycle",
+    6: "bus",
+    8: "truck"
+}
+
+# =========================================
+# CNN-TRANSFORMER FUSION (v2)
+# =========================================
+# Fusion parameters
+FUSION_IOU_THRESHOLD = 0.3
+FUSION_MODE = "hybrid"  # Options: "cnn_only", "transformer_only", "hybrid"
+FUSION_CONFIDENCE_PENALTY = 0.7  # Penalty for unvalidated CNN detections
+
+# Trajectory Prediction
+TRAJECTORY_PREDICTOR = "linear"  # Options: "linear", "kalman", "transformer"
+TRAJECTORY_HISTORY_LEN = 10
+
+# Ablation Study
+EXPERIMENT_MODE = "full_hybrid"  # Options: A, B, C, D, E, or "full_hybrid"
+SAVE_INTERMEDIATE_RESULTS = True
