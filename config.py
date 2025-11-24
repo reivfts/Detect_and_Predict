@@ -8,7 +8,8 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "data", "trackings")
 # NOTE: Update this path to your NuScenes dataset location
 # For Windows: r"C:\path\to\nuscenes\v1.0-mini"
 # For Linux/Mac: "/path/to/nuscenes/v1.0-mini"
-NUSCENES_ROOT = os.getenv("NUSCENES_ROOT", r"C:\Users\rayra\OneDrive\Desktop\v1.0-mini")
+# Or point to a direct image folder like: r"C:\path\to\samples\CAM_FRONT"
+NUSCENES_ROOT = os.getenv("NUSCENES_ROOT", r"C:\Users\rayra\OneDrive\Desktop\v1.0-trainval01_blobs\samples\CAM_FRONT")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 

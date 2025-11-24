@@ -27,7 +27,7 @@ from config import (
     USE_ANGLE_SAMPLING, PREDICTION_HORIZON_SHORT,
     TRAJECTORY_PREDICTOR, DETR_THRESHOLD, DETR_CLASS_MAP
 )
-from data.nuscenes import NuScenesLoader
+from data.nuscenes import NuScenesLoader, SimpleImageLoader
 from Detection.detector import DetectorPipeline
 from Detection.drawer import Drawer
 from Transformer.detr_model import DETRRefiner
@@ -115,8 +115,14 @@ def main():
     print("=" * 60)
     
     # Initialize components
-    print("\n[1/5] Loading NuScenes dataset...")
-    loader = NuScenesLoader(NUSCENES_ROOT)
+    print("\n[1/5] Loading dataset...")
+    # Check if NUSCENES_ROOT points to a direct image folder
+    if os.path.isdir(NUSCENES_ROOT) and any(NUSCENES_ROOT.endswith(cam) for cam in ["CAM_FRONT", "CAM_BACK", "CAM_FRONT_LEFT", "CAM_FRONT_RIGHT", "CAM_BACK_LEFT", "CAM_BACK_RIGHT"]):
+        print(f"Using SimpleImageLoader for direct folder: {NUSCENES_ROOT}")
+        loader = SimpleImageLoader(NUSCENES_ROOT)
+    else:
+        print(f"Using NuScenesLoader for dataset: {NUSCENES_ROOT}")
+        loader = NuScenesLoader(NUSCENES_ROOT)
     
     print("[2/5] Initializing DetectorPipeline (YOLO + FRCNN)...")
     detector_pipeline = DetectorPipeline()
