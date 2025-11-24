@@ -14,16 +14,22 @@ from PIL import Image
 from config import APPEARANCE_MATCHING, APPEARANCE_WEIGHT, IOU_WEIGHT, EMBEDDING_DEVICE
 
 class TransformerTracker:
-    def __init__(self, iou_thresh=0.5, max_lost=5, history_len=10, log_path="C:\\Users\\rayra\\OneDrive\\Desktop\\Detect_and_Predict\\data\\trackings\\trajectory_eval.txt"):
+    def __init__(self, iou_thresh=0.5, max_lost=10, history_len=10, log_path=None):
         self.iou_thresh = iou_thresh
         self.max_lost = max_lost
         self.next_id = 0
         self.tracks = dict()
         self.track_history = defaultdict(lambda: deque(maxlen=history_len))
+        
+        # Default log path inside project data folder when not provided
+        if log_path is None:
+            from config import BASE_DIR
+            log_path = os.path.join(BASE_DIR, "data", "trackings", "trajectory_eval.txt")
+        
         self.log_path = log_path
 
-        # Clear existing file
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        # Clear existing file and write header
+        os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
         with open(self.log_path, 'w') as f:
             f.write("track_id,frame,x_pred,y_pred,x_actual,y_actual,error\n")
 
@@ -160,6 +166,40 @@ class TransformerTracker:
         dy = cy_new - cy_old
 
         return (cx_new + dx, cy_new + dy)
+
+    def predict_tracks(self):
+        """Predict current track positions using internal Kalman filters without
+        modifying track state (safe for visualization when detections are delayed).
+
+        Returns:
+            List of dicts: [{"track_id", "box", "cls_name", "score"}, ...]
+        """
+        output = []
+        for tid, trk in list(self.tracks.items()):
+            kf = trk.get("kf")
+            if kf is not None:
+                # Predict state but do not call update on stored KF (we call predict locally)
+                # Use a copy of the state to avoid side-effects
+                try:
+                    x_copy = kf.x.copy()
+                    F = kf.F.copy()
+                    x_pred = F.dot(x_copy)
+                    z_pred = np.array([x_pred[0, 0], x_pred[1, 0], x_pred[4, 0], x_pred[5, 0]])
+                    pred_box = self._z_to_box(z_pred)
+                except Exception:
+                    pred_box = trk["box"]
+            else:
+                pred_box = trk["box"]
+
+            pred_box = self._clamp_box(pred_box)
+            output.append({
+                "track_id": tid,
+                "box": pred_box,
+                "cls_name": trk.get("cls_name"),
+                "score": trk.get("score", 1.0)
+            })
+
+        return output
 
     def update(self, detections, frame_idx, frame=None):
         updated_tracks = dict()

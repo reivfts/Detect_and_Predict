@@ -18,10 +18,11 @@ OUTPUT_PATH = os.path.join(OUTPUT_DIR, "nuscenes_yolo_detr_tracking.mp4")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Camera
+# Options: CAM_FRONT, CAM_FRONT_LEFT, CAM_FRONT_RIGHT, CAM_BACK, CAM_BACK_LEFT, CAM_BACK_RIGHT
 CAMERA_CHANNEL = "CAM_FRONT"
 
 # Classes for COCO and NuScenes
-VALID_CLASSES = ["person", "bicycle", "car", "motorcycle", "bus", "truck"]
+VALID_CLASSES = ["person", "car", "motorcycle", "bus", "truck"]
 
 # FRCNN settings  
 FRCNN_SCORE_THRESH = 0.5
@@ -48,9 +49,11 @@ FRCNN_ID2NAME = {
 YOLO_CONF = 0.4
 YOLO_IOU = 0.45
 YOLO_IMGSZ = 1280
+# Path to YOLO weights in repo root (default: bundled `yolo11m-seg.pt`)
+YOLO_WEIGHTS = os.path.join(BASE_DIR, "yolo11m-seg.pt")
 
 # Appearance (ReID) matching - optional. Disabled by default to keep tests lightweight.
-APPEARANCE_MATCHING = False
+APPEARANCE_MATCHING = True
 # Weighting between appearance distance and IoU when computing assignment cost.
 # cost = APPEARANCE_WEIGHT * appearance_distance + IOU_WEIGHT * (1 - iou)
 APPEARANCE_WEIGHT = 0.6
@@ -77,14 +80,64 @@ DETR_CLASS_MAP = {
 # CNN-TRANSFORMER FUSION (v2)
 # =========================================
 # Fusion parameters
+# Friendly mode names: use shorter, more readable labels.
+# Options (both current and legacy accepted):
+#  - "cnn" or legacy "cnn_only": use CNN detections only
+#  - "transformer" or legacy "transformer_only": use Transformer/DETR only
+#  - "cnn/transformer" or legacy "hybrid": fuse CNN + Transformer
 FUSION_IOU_THRESHOLD = 0.3
-FUSION_MODE = "hybrid"  # Options: "cnn_only", "transformer_only", "hybrid"
+FUSION_MODE = "cnn/transformer"  # Options: "cnn", "transformer", "cnn/transformer"
 FUSION_CONFIDENCE_PENALTY = 0.7  # Penalty for unvalidated CNN detections
 
 # Trajectory Prediction
-TRAJECTORY_PREDICTOR = "linear"  # Options: "linear", "kalman", "transformer"
+TRAJECTORY_PREDICTOR = "kalman"  # Options: "linear", "kalman", "transformer", "hybrid"
 TRAJECTORY_HISTORY_LEN = 10
+
+# Prediction Horizon (optimized for front camera view)
+PREDICTION_HORIZON_SHORT = 8   # 1.3 seconds @ 6Hz (immediate planning)
+PREDICTION_HORIZON_LONG = 15   # 2.5 seconds @ 6Hz (strategic planning)
+USE_LONG_HORIZON = False        # Enable for highway scenarios
+
+# Trajectory Sampling (for better turn prediction)
+USE_ANGLE_SAMPLING = True       # Sample multiple heading angles for turn prediction
+ANGLE_SAMPLE_RANGE = 0.3        # ±radians to sample (±17 degrees)
+ANGLE_SAMPLE_STEPS = 3          # Number of angle samples per prediction
+
+# Overprediction Strategy (inspired by DONUT - ICCV 2025)
+USE_OVERPREDICTION = True       # Predict multiple horizons simultaneously
+OVERPREDICTION_HORIZONS = [1, 3, 5, 8]  # Predict at these step intervals
+OVERPREDICTION_WEIGHT = 0.3     # Weight for auxiliary overprediction loss
+
+# Kalman Filter settings (used when TRAJECTORY_PREDICTOR = "kalman")
+KALMAN_PROCESS_NOISE = 0.5     # Reduced from 1.0 for smoother, more accurate predictions
+KALMAN_MEASUREMENT_NOISE = 0.8  # Slightly reduced to trust measurements more
+
+# Physics Constraints (adjusted for front camera urban scenarios)
+MAX_ACCELERATION = 4.0          # m/s^2 (urban driving)
+MAX_VELOCITY = 20.0             # m/s (~72 km/h, typical urban)
+MIN_TURN_RADIUS = 5.0           # meters (vehicle kinematic constraint)
+
+# Uncertainty Visualization
+SHOW_UNCERTAINTY = False        # Visualize prediction confidence (disable for cleaner view)
+UNCERTAINTY_SCALE = 1.0         # Scale covariance ellipses (reduced from 2.0)
+
+# Multi-Model Prediction
+USE_HYBRID_PREDICTION = False   # Combine Kalman + Transformer (disabled for performance)
+HYBRID_KALMAN_WEIGHT = 0.7      # Weight for Kalman (physics-based)
+HYBRID_TRANSFORMER_WEIGHT = 0.3 # Weight for Transformer (learning-based)
+
+# Visualization
+VELOCITY_COLOR_CODING = False   # Color-code trajectories by speed (disabled for cleaner view)
+VELOCITY_SLOW_THRESHOLD = 2.0   # m/s (green)
+VELOCITY_FAST_THRESHOLD = 10.0  # m/s (red)
 
 # Ablation Study
 EXPERIMENT_MODE = "full_hybrid"  # Options: A, B, C, D, E, or "full_hybrid"
 SAVE_INTERMEDIATE_RESULTS = True
+
+# === PERFORMANCE TUNING ===
+# Enable async inference to boost display FPS (inference in background thread)
+# DISABLED: Async causes visual lag when worker is delayed. Use sync for accurate box alignment.
+ASYNC_INFERENCE = False  # Set to True to enable
+# For async inference: queue size (larger = more latency, more buffering)
+ASYNC_QUEUE_SIZE = 2

@@ -19,10 +19,17 @@ import time
 import numpy as np
 import os
 import torch
+import argparse
 
-from config import *
-from Nuscenes.loader import NuScenesLoader
+from config import (
+    DEVICE, OUTPUT_DIR, OUTPUT_PATH, NUSCENES_ROOT, CAMERA_CHANNEL,
+    FUSION_MODE, FUSION_IOU_THRESHOLD, FUSION_CONFIDENCE_PENALTY,
+    USE_ANGLE_SAMPLING, PREDICTION_HORIZON_SHORT,
+    TRAJECTORY_PREDICTOR, DETR_THRESHOLD, DETR_CLASS_MAP
+)
+from data.nuscenes import NuScenesLoader
 from Detection.detector import DetectorPipeline
+from Detection.drawer import Drawer
 from Transformer.detr_model import DETRRefiner
 from Transformer.tracker import TransformerTracker
 from Transformer.fusion import fuse_cnn_transformer
@@ -31,9 +38,14 @@ from Transformer.trajectory_predictor import (
     save_evaluation_summary, 
     save_text_summary
 )
+from Transformer.velocity_estimator import get_velocity_estimator
+import tools.analyze_evaluation as analyze_evaluation
 
 # Configuration constant for DetectorPipeline default score
 DETECTOR_PIPELINE_DEFAULT_SCORE = 0.85
+
+# Prediction horizon: 12 frames = 2 seconds at 6Hz nuScenes sampling
+PREDICTION_HORIZON = 12
 
 
 def gpu_stats():
@@ -85,11 +97,19 @@ class VideoController:
 
 def main():
     """Main processing loop for CNN-Transformer hybrid pipeline."""
-    
+    # Parse lightweight CLI flags to override config at runtime
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--fusion-mode", type=str, default=None, help="Override fusion mode (cnn, transformer, cnn/transformer)")
+    p.add_argument("--no-analyze", action="store_true", help="Skip running post-processing analyzer")
+    parsed, _ = p.parse_known_args()
+
+    # Local fusion mode used throughout main (allows runtime override)
+    fusion_mode = parsed.fusion_mode if parsed.fusion_mode is not None else FUSION_MODE
+
     print("=" * 60)
     print("Detect and Predict v2: CNN-Transformer Hybrid")
     print("=" * 60)
-    print(f"Fusion Mode: {FUSION_MODE}")
+    print(f"Fusion Mode: {fusion_mode}")
     print(f"Trajectory Predictor: {TRAJECTORY_PREDICTOR}")
     print(f"Device: {DEVICE}")
     print("=" * 60)
@@ -107,6 +127,9 @@ def main():
     print("[4/5] Initializing TransformerTracker...")
     tracker = TransformerTracker()
     
+    # Initialize velocity estimator
+    velocity_estimator = get_velocity_estimator(fps=10.0)  # Assuming ~10 FPS
+    
     print("[5/5] Setup complete. Starting processing...")
     print("=" * 60)
     
@@ -114,6 +137,8 @@ def main():
     fps_time = time.time()
     frame_idx = 0
     controller = VideoController()
+    # Drawer instance for visualization (masks, smoothing, trails)
+    drawer = Drawer()
     
     CLASS_COLORS = {
         "car": (255, 0, 0),
@@ -139,7 +164,7 @@ def main():
         frame_idx += 1
         
         # === STEP 1: YOLO + FRCNN Fusion (DetectorPipeline) ===
-        # This gives us CNN-based detections with accurate localization
+        # This gives us CNN-based detections with accurate localization (no IDs - tracker will assign)
         yolo_frcnn_results = detector_pipeline.process(frame)
         
         if not yolo_frcnn_results:
@@ -149,32 +174,33 @@ def main():
                 break
             continue
         
-        # Convert to standard detection format
+        # DetectorPipeline now returns dicts with box, cls_name, score (no track_id)
         frcnn_dets = []
-        for box, tid, cls_name in yolo_frcnn_results:
+        for det in yolo_frcnn_results:
             frcnn_dets.append({
-                "box": box,
-                "cls_name": cls_name,
-                "score": DETECTOR_PIPELINE_DEFAULT_SCORE,  # DetectorPipeline doesn't return scores
-                "track_id": tid
+                "box": det["box"],
+                "cls_name": det["cls_name"],
+                "score": det.get("score", DETECTOR_PIPELINE_DEFAULT_SCORE)
             })
         
         # === STEP 2: DETR Enhancement (Transformer stage) ===
         detr_out = detr.predict(frame)
-        
+
         # === STEP 3: Fuse FRCNN (CNN) and DETR (Transformer) outputs ===
-        if FUSION_MODE == "hybrid":
+        # Accept friendly labels and legacy labels for backward compatibility
+        mode = (fusion_mode or "").lower()
+        if mode in ("hybrid", "cnn/transformer", "cnn_transformer"):
             # Full hybrid: use both CNN and Transformer
             fused_dets = fuse_cnn_transformer(
-                frcnn_dets, 
-                detr_out, 
+                frcnn_dets,
+                detr_out,
                 iou_thresh=FUSION_IOU_THRESHOLD,
                 confidence_penalty=FUSION_CONFIDENCE_PENALTY
             )
-        elif FUSION_MODE == "cnn_only":
+        elif mode in ("cnn", "cnn_only"):
             # CNN only: skip DETR fusion
             fused_dets = frcnn_dets
-        elif FUSION_MODE == "transformer_only":
+        elif mode in ("transformer", "transformer_only"):
             # Transformer only: use DETR detections directly
             fused_dets = []
             for det in detr_out:
@@ -186,12 +212,48 @@ def main():
                     })
         else:
             fused_dets = frcnn_dets
-        
+
         # === STEP 4: Track with TransformerTracker ===
         updated = tracker.update(fused_dets, frame_idx, frame=frame)
         
-        # === STEP 5: Trajectory prediction and evaluation ===
-        evaluate_trajectory(tracker.track_history, updated, frame_idx)
+        # === STEP 4.5: Estimate velocities for all tracked objects ===
+        for obj in updated:
+            track_id = obj.get("track_id")
+            if track_id is not None:
+                velocity = velocity_estimator.update(track_id, obj["box"], frame_idx)
+                obj["velocity"] = velocity  # Add velocity to object dict
+
+        # === STEP 5: Trajectory evaluation and prediction ===
+        evaluate_trajectory(tracker.track_history, updated, frame_idx, prediction_horizon=PREDICTION_HORIZON)
+        
+        # === STEP 6: Generate predicted trajectories for visualization ===
+        from Transformer.trajectory_predictor import KALMAN_TRACKERS
+        for obj in updated:
+            track_id = obj.get("track_id")
+            if track_id is not None and track_id in KALMAN_TRACKERS:
+                # Get velocity to check if object is moving
+                velocity = obj.get("velocity")
+                is_moving = False
+                if velocity is not None:
+                    vx, vy = velocity
+                    speed = (vx**2 + vy**2)**0.5
+                    is_moving = speed > 0.5  # Moving if speed > 0.5 pixels/frame
+                
+                # Generate predicted trajectory for all objects (will be filtered in drawer)
+                predicted_traj = []
+                if KALMAN_TRACKERS[track_id].initialized:
+                    if USE_ANGLE_SAMPLING and is_moving:
+                        # Use angle sampling for moving objects
+                        predicted_traj = KALMAN_TRACKERS[track_id].predict_with_angle_sampling(steps=PREDICTION_HORIZON)
+                    else:
+                        # Standard prediction
+                        for step in range(1, PREDICTION_HORIZON + 1):
+                            pred_box = KALMAN_TRACKERS[track_id].predict(steps=step)
+                            if pred_box is not None:
+                                predicted_traj.append(pred_box)
+                
+                obj["predicted_trajectory"] = predicted_traj if predicted_traj else None
+                obj["is_moving"] = is_moving
         
         # === Visualization ===
         for obj in updated:
@@ -199,30 +261,26 @@ def main():
             cls = obj["cls_name"]
             if cls not in CLASS_COLORS:
                 continue
-            
-            x1, y1, x2, y2 = map(int, box)
-            color = CLASS_COLORS.get(cls, (128, 128, 128))
-            
-            # Semi-transparent color overlay
-            overlay = frame.copy()
-            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
-            cv2.addWeighted(overlay, 0.35, frame, 0.65, 0, frame)
-            
-            # Label with validation info if available
-            if "validated_by" in obj:
-                label = f"{cls} [{obj['validated_by'][:3]}]"
-            else:
-                label = f"{cls}"
-            
-            cv2.putText(
-                frame,
-                label,
-                (x1 + 5, max(y1 - 5, 15)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                color,
-                2
-            )
+            # If mask available, draw it first for segmentation overlay
+            mask = obj.get("mask") if isinstance(obj, dict) else None
+            track_id = obj.get("track_id") if isinstance(obj, dict) else None
+            score = obj.get("score") if isinstance(obj, dict) else None
+            velocity = obj.get("velocity") if isinstance(obj, dict) else None
+            predicted_trajectory = obj.get("predicted_trajectory") if isinstance(obj, dict) else None
+            prediction_uncertainties = obj.get("prediction_uncertainties") if isinstance(obj, dict) else None
+            is_moving = obj.get("is_moving", False) if isinstance(obj, dict) else False
+
+            if mask is not None:
+                try:
+                    drawer.draw_mask(frame, mask, track_id, cls_name=cls)
+                except Exception:
+                    pass
+
+            # Draw smoothed, labeled box with trail, velocity vector, predicted trajectory, and uncertainty
+            drawer.draw_box(frame, box, cls, track_id=track_id, score=score, velocity=velocity, 
+                          predicted_trajectory=predicted_trajectory,
+                          prediction_uncertainties=prediction_uncertainties,
+                          is_moving=is_moving)
         
         # Display FPS and frame info
         fps = frame_idx / (time.time() - fps_time)
@@ -236,10 +294,16 @@ def main():
             2
         )
         
-        # Display fusion mode
+        # Display fusion mode (friendly)
+        disp_map = {
+            'cnn': 'CNN', 'cnn_only': 'CNN',
+            'transformer': 'Transformer', 'transformer_only': 'Transformer',
+            'cnn/transformer': 'CNN + Transformer', 'hybrid': 'CNN + Transformer'
+        }
+        disp = disp_map.get((fusion_mode or '').lower(), fusion_mode)
         cv2.putText(
             frame,
-            f"Mode: {FUSION_MODE}",
+            f"Mode: {disp}",
             (20, 70),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
@@ -264,6 +328,16 @@ def main():
     # Save evaluation results
     save_evaluation_summary()
     save_text_summary()
+
+    # Run the analyzer to compute ADE/FDE/RMSE and per-frame/track metrics
+    if not parsed.no_analyze:
+        print("\nRunning post-processing analyzer (ADE/FDE/RMSE)...")
+        try:
+            analyze_evaluation.main()
+        except Exception as e:
+            print(f"Post-processing analyzer failed: {e}")
+    else:
+        print("\nSkipping post-processing analyzer (--no-analyze)")
     
     print("\n" + "=" * 60)
     print("PROCESSING COMPLETE")

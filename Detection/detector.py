@@ -1,6 +1,7 @@
 import cv2
 from Yolo.yolo_model import YOLODetector
 from FRCNN.frcnn_model import FRCNNRefiner
+import numpy as np
 
 from config import VALID_CLASSES, DEVICE, DETR_IOU_MATCH
 
@@ -25,32 +26,23 @@ def iou(boxA, boxB):
 
 # DETECTOR PIPELINE
 class DetectorPipeline:
+    """Detection pipeline: YOLO detection -> FRCNN refinement (no tracking - handled by main pipeline)."""
+    
     def __init__(self):
         # ensure detector constructed with proper device
         self.yolo = YOLODetector(device=DEVICE)
         self.frcnn = FRCNNRefiner()
 
     def process(self, frame):
-        # YOLO detection with tracking
-        yolo_res = self.yolo.detect_and_track(frame)
+        """
+        Process frame: YOLO detection to FRCNN refinement.
+        Returns list of dicts: [{"box": [x1,y1,x2,y2], "cls_name": str, "score": float}, ...]
+        No IDs returned; pipeline tracker (TransformerTracker in main.py) assigns IDs.
+        """
+        # YOLO detection only (no tracking)
+        yolo_dets = self.yolo.detect(frame)
 
-        if yolo_res.boxes.id is None:
-            return []
-
-        y_boxes = yolo_res.boxes.xyxy.cpu().numpy()
-        y_ids = yolo_res.boxes.id.int().cpu().numpy()
-        y_clss = yolo_res.boxes.cls.int().cpu().numpy()
-        names = self.yolo.names
-
-        # Filter YOLO tracks
-        yolo_tracks = []
-        for box, tid, cls_idx in zip(y_boxes, y_ids, y_clss):
-            cls_name = names[int(cls_idx)]
-
-            if cls_name in VALID_CLASSES:
-                yolo_tracks.append((box, int(tid), cls_name))
-
-        if not yolo_tracks:
+        if not yolo_dets:
             return []
 
         # FRCNN refinement
@@ -58,11 +50,16 @@ class DetectorPipeline:
         frcnn_dets = self.frcnn.refine(frame_rgb)
 
         refined = []
-        for box, tid, cls_name in yolo_tracks:
+        for yolo_det in yolo_dets:
+            box = yolo_det["box"]
+            cls_name = yolo_det["cls_name"]
+            score = yolo_det["score"]
+            mask = yolo_det.get("mask")
 
             best_iou = 0
             best_box = None
 
+            # Find matching FRCNN box of same class
             for fr_box, _, fr_cls in frcnn_dets:
                 if fr_cls != cls_name:
                     continue
@@ -72,10 +69,46 @@ class DetectorPipeline:
                     best_iou = iou_val
                     best_box = fr_box
 
-            # Use FRCNN box if strong match
+            # Choose refined box: prefer FRCNN when it strongly matches
+            chosen_box = None
             if best_box is not None and best_iou >= DETR_IOU_MATCH:
-                refined.append((best_box, tid, cls_name))
+                chosen_box = best_box
             else:
-                refined.append((box, tid, cls_name))
+                chosen_box = box
+
+            # If YOLO provided a segmentation mask, use its tight bbox when sensible
+            try:
+                if mask is not None:
+                    m = mask
+                    m_arr = None
+                    try:
+                        m_arr = np.array(m)
+                    except Exception:
+                        m_arr = None
+
+                    if m_arr is not None:
+                        # If mask size doesn't match frame, resize mask to frame size
+                        h, w = frame.shape[:2]
+                        if m_arr.ndim == 2 and (m_arr.shape[0] != h or m_arr.shape[1] != w):
+                            try:
+                                m_resized = cv2.resize((m_arr.astype('uint8') * 255), (w, h), interpolation=cv2.INTER_NEAREST)
+                                m_bool = m_resized > 0
+                            except Exception:
+                                m_bool = m_arr > 0
+                        else:
+                            m_bool = m_arr > 0
+
+                        ys, xs = np.where(m_bool)
+                        if len(xs) > 0 and len(ys) > 0:
+                            mx1, my1, mx2, my2 = xs.min(), ys.min(), xs.max(), ys.max()
+                            mask_box = [float(mx1), float(my1), float(mx2), float(my2)]
+                            # only use mask_box if it overlaps reasonably with chosen_box
+                            iou_with_chosen = iou(chosen_box, mask_box)
+                            if iou_with_chosen > 0.05:
+                                chosen_box = mask_box
+            except Exception:
+                pass
+
+            refined.append({"box": chosen_box, "cls_name": cls_name, "score": score, "mask": mask})
 
         return refined

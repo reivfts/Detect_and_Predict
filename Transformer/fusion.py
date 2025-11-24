@@ -109,12 +109,12 @@ def fuse_cnn_transformer(
         # Determine validation status and final confidence
         if best_iou > iou_thresh:
             # Both CNN and Transformer agree
-            validated_by = "cnn+transformer"
+            validated_by = "cnn/transformer"
             # Average the confidence scores
             final_score = (frcnn_score + best_detr_score) / 2.0
         else:
             # Only CNN detected (no Transformer confirmation)
-            validated_by = "cnn_only"
+            validated_by = "cnn"
             # Reduce confidence due to lack of validation
             final_score = frcnn_score * confidence_penalty
         
