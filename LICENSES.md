@@ -4,20 +4,19 @@ This project incorporates code, models, and methodologies from various open-sour
 
 ---
 
-## Core Detection Models
+## Detection Models
 
-### YOLO (Ultralytics YOLOv11)
+### YOLO11 (Ultralytics)
 **License**: AGPL-3.0  
 **Source**: https://github.com/ultralytics/ultralytics  
 **Citation**:
-```
+```bibtex
 @software{yolo11_ultralytics,
   author = {Glenn Jocher and Jing Qiu},
   title = {Ultralytics YOLO11},
   version = {11.0.0},
   year = {2024},
   url = {https://github.com/ultralytics/ultralytics},
-  orcid = {0000-0001-5950-6979, 0000-0002-7603-6750},
   license = {AGPL-3.0}
 }
 ```
@@ -26,7 +25,7 @@ This project incorporates code, models, and methodologies from various open-sour
 **License**: BSD-3-Clause  
 **Source**: https://github.com/pytorch/vision  
 **Citation**:
-```
+```bibtex
 @inproceedings{ren2015faster,
   title={Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks},
   author={Ren, Shaoqing and He, Kaiming and Girshick, Ross and Sun, Jian},
@@ -40,7 +39,7 @@ This project incorporates code, models, and methodologies from various open-sour
 **License**: Apache-2.0  
 **Source**: https://github.com/facebookresearch/detr  
 **Citation**:
-```
+```bibtex
 @inproceedings{carion2020end,
   title={End-to-End Object Detection with Transformers},
   author={Carion, Nicolas and Massa, Francisco and Synnaeve, Gabriel and Usunier, Nicolas and Kirillov, Alexander and Zagoruyko, Sergey},
@@ -53,34 +52,42 @@ This project incorporates code, models, and methodologies from various open-sour
 
 ---
 
-## Tracking and Prediction
+## Backbone and Feature Extraction
 
-### DeepSORT
-**License**: GPL-3.0  
-**Source**: https://github.com/nwojke/deep_sort  
+### ResNet (torchvision)
+**License**: BSD-3-Clause  
+**Source**: https://github.com/pytorch/vision  
 **Citation**:
-```
-@inproceedings{wojke2017simple,
-  title={Simple Online and Realtime Tracking with a Deep Association Metric},
-  author={Wojke, Nicolai and Bewley, Alex and Paulus, Dietrich},
-  booktitle={IEEE International Conference on Image Processing (ICIP)},
-  pages={3645--3649},
-  year={2017},
-  organization={IEEE}
+```bibtex
+@inproceedings{he2016deep,
+  title={Deep Residual Learning for Image Recognition},
+  author={He, Kaiming and Zhang, Xiangyu and Ren, Shaoqing and Sun, Jian},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition},
+  pages={770--778},
+  year={2016}
 }
 ```
+
+**Usage in this project**:
+- ResNet-50: Backbone for Faster R-CNN (with FPN) and DETR
+- ResNet-18: Appearance embeddings for object re-identification (optional)
+
+---
+
+## Tracking Components
 
 ### Kalman Filter (filterpy)
 **License**: MIT  
 **Source**: https://github.com/rlabbe/filterpy  
+**Documentation**: https://filterpy.readthedocs.io/  
 **Citation**:
-```
-@book{labbe2014kalman,
-  title={Kalman and Bayesian Filters in Python},
-  author={Labbe, Roger R},
-  year={2014},
-  publisher={GitHub},
-  url={https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python}
+```bibtex
+@misc{labbe2014filterpy,
+  author = {Roger R. Labbe Jr.},
+  title = {FilterPy: Python library for Kalman filtering and optimal estimation},
+  year = {2014},
+  publisher = {GitHub},
+  url = {https://github.com/rlabbe/filterpy}
 }
 ```
 
@@ -88,7 +95,7 @@ This project incorporates code, models, and methodologies from various open-sour
 **License**: BSD-3-Clause  
 **Source**: https://github.com/scipy/scipy  
 **Citation**:
-```
+```bibtex
 @article{scipy2020,
   author = {Virtanen, Pauli and Gommers, Ralf and Oliphant, Travis E. and others},
   title = {SciPy 1.0: Fundamental Algorithms for Scientific Computing in Python},
@@ -104,25 +111,9 @@ This project incorporates code, models, and methodologies from various open-sour
 
 ## Research Methodologies
 
-### DONUT (Angle Sampling and Overprediction)
-**License**: Not specified (research paper)  
-**Source**: https://github.com/MKnoche/DONUT  
-**Citation**:
-```
-@inproceedings{knoche2025donut,
-  title={DONUT: Rethinking Dual-stage Methodology for End-to-end Autonomous Driving},
-  author={Knoche, Martin and others},
-  booktitle={IEEE/CVF International Conference on Computer Vision (ICCV)},
-  year={2025},
-  note={Accepted for publication}
-}
-```
-
-**Implementation Notes**: This project adapts the angle sampling strategy (±17° hypotheses) and multi-horizon overprediction approach from DONUT for trajectory forecasting.
-
 ### CNN-Transformer Hybrid Architecture
 **Citation**:
-```
+```bibtex
 @article{feng2022cnn,
   title={CNN-Transformer Mixed Model for Object Detection},
   author={Feng, Chengjian and Zhong, Yujie and Huang, Weilin},
@@ -133,48 +124,19 @@ This project incorporates code, models, and methodologies from various open-sour
 
 **Implementation Notes**: This project implements a three-stage detection pipeline (YOLO → Faster R-CNN → DETR) with fusion, inspired by hybrid CNN-Transformer architectures.
 
-### Trajectron++ (Transformer-based Prediction)
-**License**: MIT  
-**Source**: https://github.com/StanfordASL/Trajectron-plus-plus  
+### Two-Level Trajectory Prediction (LSTM Policy Network)
 **Citation**:
-```
-@inproceedings{salzmann2020trajectron++,
-  title={Trajectron++: Dynamically-Feasible Trajectory Forecasting With Heterogeneous Data},
-  author={Salzmann, Tim and Ivanovic, Boris and Chakravarty, Punarjay and Pavone, Marco},
-  booktitle={European Conference on Computer Vision},
-  pages={683--700},
-  year={2020},
-  organization={Springer}
+```bibtex
+@inproceedings{xue2018ss,
+  title={SS-LSTM: A Hierarchical LSTM Model for Pedestrian Trajectory Prediction},
+  author={Xue, Hao and Huynh, Du Q and Reynolds, Mark},
+  booktitle={IEEE Winter Conference on Applications of Computer Vision (WACV)},
+  pages={1186--1194},
+  year={2018}
 }
 ```
 
-**Implementation Notes**: Transformer-based trajectory prediction with attention mechanisms over historical trajectories.
-
-### AgentFormer (Multi-Agent Forecasting)
-**License**: MIT  
-**Source**: https://github.com/Khrylx/AgentFormer  
-**Citation**:
-```
-@inproceedings{yuan2021agent,
-  title={AgentFormer: Agent-Aware Transformers for Socio-Temporal Multi-Agent Forecasting},
-  author={Yuan, Ye and Weng, Xinshuo and Ou, Yanglan and Kitani, Kris},
-  booktitle={IEEE/CVF International Conference on Computer Vision (ICCV)},
-  pages={9813--9823},
-  year={2021}
-}
-```
-
-### MultiPath (Probabilistic Trajectory Prediction)
-**Citation**:
-```
-@inproceedings{chai2019multipath,
-  title={MultiPath: Multiple Probabilistic Anchor Trajectory Hypotheses for Behavior Prediction},
-  author={Chai, Yuning and Sapp, Benjamin and Bansal, Mayank and Anguelov, Dragomir},
-  booktitle={Conference on Robot Learning},
-  pages={86--99},
-  year={2019}
-}
-```
+**Implementation Notes**: This project implements a custom 2-layer LSTM network for policy anticipation (6 maneuver classes) inspired by hierarchical prediction approaches.
 
 ---
 
@@ -184,7 +146,7 @@ This project incorporates code, models, and methodologies from various open-sour
 **License**: CC BY-NC-SA 4.0 (Creative Commons Attribution-NonCommercial-ShareAlike 4.0)  
 **Source**: https://www.nuscenes.org/  
 **Citation**:
-```
+```bibtex
 @inproceedings{caesar2020nuscenes,
   title={nuScenes: A Multimodal Dataset for Autonomous Driving},
   author={Caesar, Holger and Bankiti, Varun and Lang, Alex H. and Vora, Sourabh and Liong, Venice Erin and Xu, Qiang and Krishnan, Anush and Pan, Yu and Baldan, Giancarlo and Beijbom, Oscar},
@@ -194,7 +156,7 @@ This project incorporates code, models, and methodologies from various open-sour
 }
 ```
 
-**Usage**: This project uses the nuScenes v1.0-mini dataset (10 scenes) for development and evaluation purposes only.
+**Usage**: This project uses the nuScenes v1.0-mini dataset (10 scenes) for development and evaluation purposes only. The dataset is used under the non-commercial license.
 
 ---
 
@@ -204,7 +166,7 @@ This project incorporates code, models, and methodologies from various open-sour
 **License**: BSD-3-Clause  
 **Source**: https://github.com/pytorch/pytorch  
 **Citation**:
-```
+```bibtex
 @inproceedings{paszke2019pytorch,
   title={PyTorch: An Imperative Style, High-Performance Deep Learning Library},
   author={Paszke, Adam and Gross, Sam and Massa, Francisco and Lerer, Adam and Bradbury, James and Chanan, Gregory and Killeen, Trevor and Lin, Zeming and Gimelshein, Natalia and Antiga, Luca and others},
@@ -218,7 +180,7 @@ This project incorporates code, models, and methodologies from various open-sour
 **License**: Apache-2.0  
 **Source**: https://github.com/huggingface/transformers  
 **Citation**:
-```
+```bibtex
 @inproceedings{wolf2020transformers,
   title={Transformers: State-of-the-Art Natural Language Processing},
   author={Wolf, Thomas and Debut, Lysandre and Sanh, Victor and Chaumond, Julien and Delangue, Clement and Moi, Anthony and Cistac, Pierric and Rault, Tim and Louf, Remi and Funtowicz, Morgan and others},
@@ -244,10 +206,6 @@ This project incorporates code, models, and methodologies from various open-sour
 **License**: BSD-3-Clause  
 **Source**: https://github.com/pandas-dev/pandas  
 
-### Matplotlib
-**License**: PSF-based (similar to Python Software Foundation License)  
-**Source**: https://github.com/matplotlib/matplotlib  
-
 ---
 
 ## License Compatibility
@@ -256,9 +214,8 @@ This project is distributed for **academic and research use only**. The primary 
 
 1. **YOLO (AGPL-3.0)**: Requires that modifications and derivative works also be open-sourced under AGPL-3.0 if distributed.
 2. **nuScenes Dataset (CC BY-NC-SA 4.0)**: Restricts commercial use and requires attribution.
-3. **DeepSORT (GPL-3.0)**: Requires derivative works to be licensed under GPL-3.0.
 
-**Recommended License for This Project**: AGPL-3.0 (to comply with the most restrictive component - YOLO)
+**Project License**: AGPL-3.0 (to comply with the most restrictive component - YOLO)
 
 ---
 
@@ -266,15 +223,15 @@ This project is distributed for **academic and research use only**. The primary 
 
 The following components are original contributions from this project:
 
-1. **Hybrid Prediction Ensemble**: Weighted combination of Kalman filter (physics-based) and Transformer (learning-based) predictions
-2. **Distance-Weighted Error Metrics**: Prioritization of nearby objects in evaluation
-3. **Adaptive Noise Tuning**: Speed-based Kalman filter process noise adjustment
-4. **Enhanced Velocity Estimation**: 10-frame EMA with median-based outlier rejection
-5. **Multi-stage Detection Fusion**: Integration of YOLO, Faster R-CNN, and DETR outputs
-6. **Physics-Constrained Kalman Filtering**: Maximum velocity and acceleration enforcement
-7. **Uncertainty Quantification Visualization**: Covariance ellipse rendering for prediction confidence
+1. **Three-Stage Detection Fusion**: Integration of YOLO, Faster R-CNN, and DETR outputs
+2. **Physics-Constrained Kalman Filtering**: Maximum velocity and acceleration enforcement
+3. **Hybrid Trajectory Prediction**: Weighted combination of Kalman filter (physics-based) and Transformer (learning-based) predictions
+4. **Policy Anticipation LSTM**: Custom 2-layer LSTM for 6-class maneuver prediction
+5. **Enhanced Velocity Estimation**: 10-frame EMA with median-based outlier rejection
+6. **Uncertainty Quantification Visualization**: Covariance ellipse rendering for prediction confidence
+7. **Simple Image Loader**: Direct image folder loading without metadata requirements
 
-These original contributions are released under the **AGPL-3.0 license** to maintain compatibility with the YOLO component.
+These original contributions are released under the **AGPL-3.0 license**.
 
 ---
 
@@ -292,4 +249,4 @@ We acknowledge the authors of all cited works and the open-source community for 
 
 ---
 
-**Last Updated**: November 23, 2025
+**Last Updated**: December 1, 2025
