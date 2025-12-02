@@ -8,49 +8,71 @@ A real-time deep learning pipeline for autonomous driving perception using the n
 Input Frame (nuScenes Camera or Image Folder)
          |
          v
-    [YOLO11m-seg]  Fast detection + instance segmentation
+┌────────────────────────────────────────────────────────────┐
+│                   DETECTION PIPELINE                        │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
+│  │  YOLO11m-seg │ -> │ Faster R-CNN │    │     DETR     │ │
+│  │   (Segment)  │    │ (ResNet-50)  │    │ (ResNet-50)  │ │
+│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│         |                    |                    |         │
+│         └──────┬─────────────┘                    |         │
+│                v                                   |         │
+│      ┌─────────────────┐                          |         │
+│      │ DetectorPipeline│ (YOLO + FRCNN Fusion)    |         │
+│      └─────────────────┘                          |         │
+│                |                                   |         │
+│                └─────────────┬─────────────────────┘         │
+│                              v                               │
+│                    ┌──────────────────┐                      │
+│                    │  Fusion Module   │                      │
+│                    │ (CNN+Transformer)│                      │
+│                    └──────────────────┘                      │
+└────────────────────────────────────────────────────────────┘
          |
          v
-  [Faster R-CNN]  Refined bounding boxes (ResNet-50 + FPN)
+┌────────────────────────────────────────────────────────────┐
+│                 TRACKING & ID ASSIGNMENT                    │
+│                ┌─────────────────────┐                      │
+│                │ TransformerTracker  │                      │
+│                │  - Kalman Filter    │                      │
+│                │  - Hungarian Algo   │                      │
+│                │  - ResNet-18 (opt)  │                      │
+│                └─────────────────────┘                      │
+└────────────────────────────────────────────────────────────┘
          |
          v
-      [DETR]  Transformer-based detection (ResNet-50)
+┌────────────────────────────────────────────────────────────┐
+│              TRAJECTORY PREDICTION PIPELINE                 │
+│                                                              │
+│  ┌────────────────────┐                                     │
+│  │ Velocity Estimator │ (EMA smoothing, outlier rejection) │
+│  └────────────────────┘                                     │
+│           |                                                  │
+│           v                                                  │
+│  ┌────────────────────┐                                     │
+│  │  Policy LSTM Net   │ (6-class maneuver prediction)      │
+│  └────────────────────┘                                     │
+│           |                                                  │
+│           v                                                  │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │         Hybrid Trajectory Predictor                 │    │
+│  │  ┌──────────────────┐  ┌──────────────────────┐   │    │
+│  │  │  Kalman Physics  │  │ Transformer Attention│   │    │
+│  │  │   (Weight: 0.7)  │  │    (Weight: 0.3)     │   │    │
+│  │  └──────────────────┘  └──────────────────────┘   │    │
+│  │           |                       |                 │    │
+│  │           └───────────┬───────────┘                 │    │
+│  │                       v                             │    │
+│  │         ┌─────────────────────────┐                │    │
+│  │         │ Uncertainty Quantify    │                │    │
+│  │         │ (Covariance Ellipses)   │                │    │
+│  │         └─────────────────────────┘                │    │
+│  └────────────────────────────────────────────────────┘    │
+└────────────────────────────────────────────────────────────┘
          |
          v
-  [Fusion Module] --> Combined Detections
-         |
-         v
-[Multi-Hypothesis Tracker]
-    |            |
-    |    [ResNet-18 Appearance]
-    |            |
-    v            v
-[Kalman Filter] + [Hungarian Association]
-  (Physics-Constrained)
-         |
-         v
-  [Velocity Estimator] (EMA, Outlier Rejection)
-         |
-         v
-  [Policy LSTM Network]
-    (6-class maneuvers)
-         |
-         v
-[Hybrid Trajectory Predictor]
-    |                    |
-    v                    v
-[Kalman Physics]   [Transformer Attention]
-(Weight: 0.7)         (Weight: 0.3)
-    |                    |
-    +--------------------+
-              |
-              v
-    [Uncertainty Quantification]
-       (Covariance Ellipses)
-              |
-              v
-      Predicted Trajectories
-   (12-30 frames, 2-5 seconds)
+   Predicted Trajectories
+  (12-30 frames, 2-5 sec)
 ```
 
 ## Quick Start
